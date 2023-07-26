@@ -1,12 +1,6 @@
 import React from 'react';
-import {
-  SafeAreaView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  useColorScheme,
-  View,
-} from 'react-native';
+import {StatusBar, StyleSheet, Text, useColorScheme, View} from 'react-native';
+import {SafeAreaProvider, SafeAreaView} from 'react-native-safe-area-context';
 
 import {Colors} from 'react-native/Libraries/NewAppScreen';
 
@@ -18,15 +12,17 @@ function App(): JSX.Element {
   };
 
   return (
-    <SafeAreaView style={backgroundStyle}>
-      <StatusBar
-        barStyle={isDarkMode ? 'light-content' : 'dark-content'}
-        backgroundColor={backgroundStyle.backgroundColor}
-      />
-      <View>
-        <Text style={styles.text}>Test</Text>
-      </View>
-    </SafeAreaView>
+    <SafeAreaProvider>
+      <SafeAreaView>
+        <StatusBar
+          barStyle={isDarkMode ? 'light-content' : 'dark-content'}
+          backgroundColor={backgroundStyle.backgroundColor}
+        />
+        <View>
+          <Text style={styles.text}>Testing</Text>
+        </View>
+      </SafeAreaView>
+    </SafeAreaProvider>
   );
 }
 
