@@ -1,4 +1,6 @@
-import './global.types';
+import './utils/global.types';
+import './utils/webrtc-setup';
+
 import React from 'react';
 import {StatusBar, useColorScheme} from 'react-native';
 import {Colors} from 'react-native/Libraries/NewAppScreen';
@@ -9,7 +11,8 @@ import {createNativeStackNavigator} from '@react-navigation/native-stack';
 
 import {ChooseUser} from './screens/ChooseUser';
 import {Call} from './screens/Call';
-import {SCREENS} from './constants';
+import {SCREENS} from './utils/constants';
+import {CallRoom} from './screens/CallRoom';
 
 const Stack = createNativeStackNavigator();
 
@@ -38,6 +41,11 @@ function App() {
               name={SCREENS.CALL}
               component={Call}
               options={{title: 'Call'}}
+            />
+            <Stack.Screen
+              name={SCREENS.CALL_ROOM}
+              component={CallRoom}
+              options={{title: 'Call Room'}}
             />
           </Stack.Navigator>
         </PaperProvider>

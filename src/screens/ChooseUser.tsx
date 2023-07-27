@@ -5,7 +5,7 @@ import {Button, RadioButton} from 'react-native-paper';
 import {useNavigation} from '@react-navigation/native';
 
 import {useUserStore, User} from '../store';
-import {SCREENS} from '../constants';
+import {SCREENS} from '../utils/constants';
 
 export function ChooseUser() {
   const userStore = useUserStore();

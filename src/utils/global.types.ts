@@ -1,6 +1,7 @@
 export type RootStackParamList = {
   ChooseUser: undefined;
   Call: undefined;
+  CallRoom: undefined;
 };
 
 declare global {
