@@ -1,3 +1,4 @@
+import './global.types';
 import React from 'react';
 import {StatusBar, useColorScheme} from 'react-native';
 import {Colors} from 'react-native/Libraries/NewAppScreen';
@@ -28,8 +29,16 @@ function App() {
             backgroundColor={backgroundStyle.backgroundColor}
           />
           <Stack.Navigator initialRouteName={SCREENS.CHOOSE_USER}>
-            <Stack.Screen name={SCREENS.CHOOSE_USER} component={ChooseUser} />
-            <Stack.Screen name={SCREENS.CALL} component={Call} />
+            <Stack.Screen
+              name={SCREENS.CHOOSE_USER}
+              component={ChooseUser}
+              options={{title: 'Choose User'}}
+            />
+            <Stack.Screen
+              name={SCREENS.CALL}
+              component={Call}
+              options={{title: 'Call'}}
+            />
           </Stack.Navigator>
         </PaperProvider>
       </SafeAreaProvider>

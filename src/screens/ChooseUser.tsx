@@ -2,15 +2,18 @@ import React from 'react';
 import {View} from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {Button, RadioButton} from 'react-native-paper';
+import {useNavigation} from '@react-navigation/native';
 
 import {useUserStore, User} from '../store';
+import {SCREENS} from '../constants';
 
 export function ChooseUser() {
   const userStore = useUserStore();
+  const navigation = useNavigation();
+
   const handleNext = () => {
-    console.log('Next!!');
+    navigation.navigate(SCREENS.CALL);
   };
-  console.log('User is:', userStore.user);
 
   return (
     <SafeAreaView>

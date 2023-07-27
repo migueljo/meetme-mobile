@@ -1,4 +1,4 @@
 export const SCREENS = {
-  CHOOSE_USER: 'Choose User',
+  CHOOSE_USER: 'ChooseUser',
   CALL: 'Call',
-};
+} as const;
