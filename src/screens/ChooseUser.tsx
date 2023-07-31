@@ -6,12 +6,15 @@ import {useNavigation} from '@react-navigation/native';
 
 import {useUserStore, User} from '../store';
 import {SCREENS} from '../utils/constants';
+import useSignalingConnection from '../hooks/useSignalingServer';
 
 export function ChooseUser() {
   const userStore = useUserStore();
   const navigation = useNavigation();
+  const signalingConnection = useSignalingConnection();
 
   const handleNext = () => {
+    signalingConnection.start();
     navigation.navigate(SCREENS.CALL);
   };
 
