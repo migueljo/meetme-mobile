@@ -13,9 +13,13 @@ export function ChooseUser() {
   const navigation = useNavigation();
   const signalingConnection = useSignalingConnection();
 
-  const handleNext = () => {
-    signalingConnection.start({authToken: userStore.user});
-    navigation.navigate(SCREENS.CALL);
+  const handleNext = async () => {
+    try {
+      await signalingConnection.start({authToken: userStore.user});
+      navigation.navigate(SCREENS.CALL);
+    } catch (error) {
+      console.error("ChooseUser: Couldn't start signaling connection", error);
+    }
   };
 
   return (

@@ -1,3 +1,8 @@
+import {useRef} from 'react';
+import {WebRTCCall} from '../libs/WebRTCCall';
+
 export function useWebRTCCall() {
-  return {};
+  const webrtcCall = useRef(new WebRTCCall());
+
+  return webrtcCall.current;
 }

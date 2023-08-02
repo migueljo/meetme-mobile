@@ -60,7 +60,6 @@ const PEER_CONSTRAINTS = {
  */
 
 export class WebRTCCall {
-  private localMediaStream: any;
   private remoteMediaStream: any;
   private peerConnection: any;
   private remoteCandidates = [];
@@ -81,7 +80,7 @@ export class WebRTCCall {
         sessionConstraints,
       );
       this.offer = offerDescription;
-      const userStore = useUserStore();
+      const userStore = useUserStore.getState();
       const offerData: OfferMessageData = {
         type: offerDescription.type,
         name: userStore.user,
@@ -91,7 +90,7 @@ export class WebRTCCall {
 
       await this.peerConnection.setLocalDescription(offerDescription);
 
-      console.log('WebRTC: Emitting offer', offerData);
+      console.log('WebRTCCall: Emitting offer', offerData);
       this.signalingConnection?.emit(EventTypes.offer, offerData);
     } catch (err) {
       // TODO: Think about how to handle this error.
@@ -100,7 +99,7 @@ export class WebRTCCall {
   };
 
   private handleRemoteOffer = async (offerData: OfferMessageData) => {
-    console.log('WebRTC: Received offer', offerData);
+    console.log('WebRTCCall: Received offer', offerData);
     try {
       const offerDescription = new RTCSessionDescription({
         sdp: offerData.sdp,
@@ -121,7 +120,7 @@ export class WebRTCCall {
       // Here is a good place to process candidates.
       this.processCandidates();
       // Send the answerDescription back as a response to the offerDescription.
-      console.log('WebRTC: Emitting answer', answerData);
+      console.log('WebRTCCall: Emitting answer', answerData);
       this.signalingConnection?.emit(EventTypes.answer, answerData);
     } catch (err) {
       throw err;
@@ -130,8 +129,7 @@ export class WebRTCCall {
   };
 
   private handleRemoteAnswer = async (answerData: AnswerMessageData) => {
-    console.log('WebRTC: Received answer', answerData);
-
+    console.log('WebRTCCall: Received answer', answerData);
     try {
       const answerDescription = new RTCSessionDescription({
         sdp: answerData.sdp,
@@ -147,7 +145,10 @@ export class WebRTCCall {
   private handleRemoteICECandidate(
     iceCandidateMessage: IceCandidateMessageData,
   ) {
-    console.log('WebRTC: Received remote ICE candidate', iceCandidateMessage);
+    console.log(
+      'WebRTCCall: Received remote ICE candidate',
+      iceCandidateMessage,
+    );
 
     // TODO: Implement this.
     // const iceCandidate = new RTCIceCandidate(iceCandidate);
@@ -187,7 +188,7 @@ export class WebRTCCall {
         videoTrack.enabled = false;
       }
 
-      this.localMediaStream = mediaStream;
+      return mediaStream;
     } catch (err) {
       // TODO: Think about how to handle this error.
       throw err;
@@ -334,19 +335,27 @@ export class WebRTCCall {
   };
 
   private addSignalingEventListeners = () => {
-    this.signalingConnection?.on('offer', this.handleRemoteOffer);
-    this.signalingConnection?.on('answer', this.handleRemoteAnswer);
+    console.log(
+      'WebRTCCall: adding signaling event listeners?',
+      !!this.signalingConnection,
+    );
+    this.signalingConnection?.on(EventTypes.offer, this.handleRemoteOffer);
+    this.signalingConnection?.on(EventTypes.answer, this.handleRemoteAnswer);
     this.signalingConnection?.on(
-      'new-ice-candidate',
+      EventTypes.newIceCandidate,
       this.handleRemoteICECandidate,
     );
   };
 
   private removeSignalingEventListeners = () => {
-    this.signalingConnection?.off('offer', this.handleRemoteOffer);
-    this.signalingConnection?.off('answer', this.handleRemoteAnswer);
+    console.log(
+      'WebRTCCall: removing signaling event listeners?',
+      !!this.signalingConnection,
+    );
+    this.signalingConnection?.off(EventTypes.offer, this.handleRemoteOffer);
+    this.signalingConnection?.off(EventTypes.answer, this.handleRemoteAnswer);
     this.signalingConnection?.off(
-      'new-ice-candidate',
+      EventTypes.newIceCandidate,
       this.handleRemoteICECandidate,
     );
   };
@@ -358,17 +367,15 @@ export class WebRTCCall {
   startCall = async ({authToken}: GetSignalingConnectionArgs) => {
     this.signalingConnection = await getSignalingConnection({authToken});
     this.peerConnection = new RTCPeerConnection(PEER_CONSTRAINTS);
+    const localMediaStream = await this.getUserMedia();
 
     this.addWebRTCEventListeners();
     this.addSignalingEventListeners();
 
-    // TODO: Add type for track.
     // Add our media stream tracks to the peer connection.
-    this.localMediaStream
+    localMediaStream
       .getTracks()
-      .forEach(track =>
-        this.peerConnection.addTrack(track, this.localMediaStream),
-      );
+      .forEach(track => this.peerConnection.addTrack(track, localMediaStream));
   };
 
   endCall = () => {

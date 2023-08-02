@@ -6,30 +6,55 @@ import {useNavigation} from '@react-navigation/native';
 
 import {useUserStore} from '../store';
 import {SCREENS} from '../utils/constants';
-import useSignalingConnection from '../hooks/useSignalingConnection';
+import {useWebRTCCall} from '../hooks/useWebRTCCall';
+import {
+  EventTypes,
+  disconnectSignalingConnection,
+  getSignalingConnection,
+} from '../libs/SignalingConnection';
 
 export function Call() {
   const userStore = useUserStore();
   const callee = userStore.user === 'bob' ? 'alice' : 'bob';
   const navigation = useNavigation();
-  const signalingConnection = useSignalingConnection();
+  const webrtcCall = useWebRTCCall();
 
-  const handleCall = () => {
-    console.log('Calling', callee);
+  const handleCall = async () => {
+    console.log('Call screen: handle call to:', callee);
     userStore.setCallee(callee);
+    webrtcCall.startCall({authToken: userStore.user});
     navigation.navigate(SCREENS.CALL_ROOM);
   };
 
   useEffect(() => {
+    const handleSignalingConnection = async () => {
+      try {
+        const signalingConnection = await getSignalingConnection({
+          authToken: userStore.user,
+        });
+        console.log('Call screen: adding offer listener');
+        signalingConnection.on(EventTypes.offer, data => {
+          console.log('Call screen: received offer from:', data);
+          // TODO: Show accept/reject dialog and implement accept/reject logic in WebRTCCall module
+        });
+      } catch (error) {
+        console.error('Call screen: Error getting signaling connection', error);
+      }
+    };
+    handleSignalingConnection();
+  }, [userStore.user]);
+
+  useEffect(() => {
     const handleBeforeRemove = () => {
-      console.log('Call screen beforeRemove');
-      signalingConnection.stop();
+      console.log('Call screen: beforeRemove');
+      disconnectSignalingConnection();
     };
     navigation.addListener('beforeRemove', handleBeforeRemove);
+
     return () => {
       navigation.removeListener('beforeRemove', handleBeforeRemove);
     };
-  }, [navigation, signalingConnection]);
+  }, [navigation]);
 
   return (
     <SafeAreaView>

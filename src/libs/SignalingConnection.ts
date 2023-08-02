@@ -20,16 +20,19 @@ async function initWebSocket({
     console.log('Connecting to signaling server');
 
     socket.on('connect', () => {
-      console.log('Connected to signaling server');
+      console.log('SignalingConnection: Connected to signaling server');
       resolve(socket as Socket);
     });
 
     socket.on('disconnect', reason => {
-      console.log('Disconnected from signaling server:', reason);
+      console.log(
+        'SignalingConnection: Disconnected from signaling server:',
+        reason,
+      );
     });
 
     socket.on('connect_error', error => {
-      console.log('Connection error:', error);
+      console.log('SignalingConnection: Connection error:', error);
       reject(error);
     });
   });
