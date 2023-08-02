@@ -8,6 +8,10 @@ export const EventTypes = {
   offer: 'offer',
   answer: 'answer',
   newIceCandidate: 'new-ice-candidate',
+  rejectCall: 'reject-call',
+  callRejected: 'call-rejected',
+  acceptCall: 'accept-call',
+  callAccepted: 'call-accepted',
 } as const;
 
 async function initWebSocket({

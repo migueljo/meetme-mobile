@@ -14,54 +14,43 @@ import {
 } from './SignalingConnection';
 import {useUserStore} from '../store';
 
-type OfferMessageData = {
+export type OfferMessageData = {
   type: 'offer';
   name: string; // Sender's name
   target: string; // // Person receiving the description
   sdp: string; // Description to send
 };
 
-type AnswerMessageData = {
+export type AnswerMessageData = {
   type: 'answer';
   name: string; // Sender's name
   target: string; // // Person receiving the description
   sdp: string; // Description to send
 };
 
-type IceCandidateMessageData = {
+export type IceCandidateMessageData = {
   type: 'new-ice-candidate';
   target: string; // Person receiving the description
   candidate: string; // The SDP candidate string
+};
+
+export type RejectCallData = {
+  type: 'reject-call';
+  target: string;
+  from: string;
+};
+
+export type CallRejectedData = {
+  type: 'call-rejected';
 };
 
 const PEER_CONSTRAINTS = {
   iceServers: [{urls: 'stun:stun.l.google.com:19302'}],
 };
 
-/*
-  TODO:
-  4. Listen to "video-offer" and do:
-    4.1. Create an RTCPeerConnection
-    4.2. Create an RTCSessionDescription using the received SDP offer
-    4.3. Call RTCPeerConnection.setRemoteDescription() to tell WebRTC about Naomi's configuration
-    4.4. Call getUserMedia() to access the webcam and microphone
-    4.5. Promise fulfilled: add the local stream's tracks by calling RTCPeerConnection.addTrack()
-    4.6. Promise fulfilled: call RTCPeerConnection.createAnswer() to create an SDP answer to send to Naomi
-    4.7. Promise fulfilled: configure Priya's end of the connection by match the generated answer by calling RTCPeerConnection.setLocalDescription()
-    4.8. Promise fulfilled: send the SDP answer through the signaling server to Naomi in a message of type “video-answer”
-*/
-
-/**
- * TODO:
- * 5. Listen to "video-answer" and do:
- * 5.1. Create an RTCSessionDescriptio n using the received SDP answer
- * 5.2. Pass the session description to RTCPeerConnection.setRemoteDescription()
- *    to configure Naomi's WebRTC layer to know how Priya's end of the connection is configured
- */
-
 export class WebRTCCall {
   private remoteMediaStream: any;
-  private peerConnection: any;
+  private peerConnection: RTCPeerConnection | null = null;
   private remoteCandidates = [];
   private offer = null;
   private signalingConnection: SignalingConnectionType | null = null;
@@ -76,7 +65,7 @@ export class WebRTCCall {
     };
 
     try {
-      const offerDescription = await this.peerConnection.createOffer(
+      const offerDescription = await this.peerConnection?.createOffer(
         sessionConstraints,
       );
       this.offer = offerDescription;
@@ -88,7 +77,7 @@ export class WebRTCCall {
         sdp: offerDescription.sdp,
       };
 
-      await this.peerConnection.setLocalDescription(offerDescription);
+      await this.peerConnection?.setLocalDescription(offerDescription);
 
       console.log('WebRTCCall: Emitting offer', offerData);
       this.signalingConnection?.emit(EventTypes.offer, offerData);
@@ -105,9 +94,9 @@ export class WebRTCCall {
         sdp: offerData.sdp,
         type: offerData.type,
       });
-      await this.peerConnection.setRemoteDescription(offerDescription);
+      await this.peerConnection?.setRemoteDescription(offerDescription);
 
-      const answerDescription = await this.peerConnection.createAnswer();
+      const answerDescription = await this.peerConnection?.createAnswer();
       const answerData: AnswerMessageData = {
         type: answerDescription.type,
         name: offerData.target,
@@ -115,7 +104,7 @@ export class WebRTCCall {
         sdp: answerDescription.sdp,
       };
 
-      await this.peerConnection.setLocalDescription(answerDescription);
+      await this.peerConnection?.setLocalDescription(answerDescription);
 
       // Here is a good place to process candidates.
       this.processCandidates();
@@ -135,7 +124,7 @@ export class WebRTCCall {
         sdp: answerData.sdp,
         type: answerData.type,
       });
-      await this.peerConnection.setRemoteDescription(answerDescription);
+      await this.peerConnection?.setRemoteDescription(answerDescription);
     } catch (err) {
       // TODO: Think about how to handle this error.
       throw err;
@@ -153,10 +142,10 @@ export class WebRTCCall {
     // TODO: Implement this.
     // const iceCandidate = new RTCIceCandidate(iceCandidate);
     // // TODO: what does remoteDescription mean/do?
-    // if (this.peerConnection.remoteDescription == null) {
+    // if (this.peerConnection?.remoteDescription == null) {
     //   return this.remoteCandidates.push(iceCandidate);
     // }
-    // return this.peerConnection.addIceCandidate(iceCandidate);
+    // return this.peerConnection?.addIceCandidate(iceCandidate);
   }
 
   private processCandidates() {
@@ -165,7 +154,7 @@ export class WebRTCCall {
     }
 
     this.remoteCandidates.map(candidate =>
-      this.peerConnection.addIceCandidate(candidate),
+      this.peerConnection?.addIceCandidate(candidate),
     );
     this.remoteCandidates = [];
   }
@@ -197,7 +186,7 @@ export class WebRTCCall {
 
   // TODO: Add type for event.
   private handleConnectionStateChange = event => {
-    switch (this.peerConnection.connectionState) {
+    switch (this.peerConnection?.connectionState) {
       case 'closed':
         // You can handle the call being disconnected here.
 
@@ -226,7 +215,7 @@ export class WebRTCCall {
 
   // TODO: Add type for event.
   private handleIceConnectionStateChange = event => {
-    switch (this.peerConnection.iceConnectionState) {
+    switch (this.peerConnection?.iceConnectionState) {
       case 'connected':
       case 'completed':
         // You can handle the call being connected here.
@@ -250,7 +239,7 @@ export class WebRTCCall {
 
   // TODO: Add type for event.
   private handleSignalingStateChange = event => {
-    switch (this.peerConnection.signalingState) {
+    switch (this.peerConnection?.signalingState) {
       case 'closed':
         // You can handle the call being disconnected here.
         // TODO: Dispatch event to the component to handle the call being disconnected.
@@ -267,71 +256,79 @@ export class WebRTCCall {
   };
 
   private addWebRTCEventListeners = () => {
-    this.peerConnection.addEventListener(
+    this.peerConnection?.addEventListener(
       'connectionstatechange',
       this.handleConnectionStateChange,
     );
 
-    this.peerConnection.addEventListener(
+    this.peerConnection?.addEventListener(
       'icecandidate',
       this.handleIceCandidate,
     );
 
-    this.peerConnection.addEventListener(
+    this.peerConnection?.addEventListener(
       'icecandidateerror',
       this.handleIceCandidateError,
     );
 
-    this.peerConnection.addEventListener(
+    this.peerConnection?.addEventListener(
       'iceconnectionstatechange',
       this.handleIceConnectionStateChange,
     );
 
-    this.peerConnection.addEventListener(
+    this.peerConnection?.addEventListener(
       'negotiationneeded',
       this.handleNegotiationNeeded,
     );
 
-    this.peerConnection.addEventListener(
+    this.peerConnection?.addEventListener(
       'signalingstatechange',
       this.handleSignalingStateChange,
     );
 
-    this.peerConnection.addEventListener('track', this.handleNewRemoteTrack);
+    this.peerConnection?.addEventListener('track', this.handleNewRemoteTrack);
   };
 
   private removeWebRTCEventListeners = () => {
-    this.peerConnection.removeEventListener(
+    this.peerConnection?.removeEventListener(
       'connectionstatechange',
       this.handleConnectionStateChange,
     );
 
-    this.peerConnection.removeEventListener(
+    this.peerConnection?.removeEventListener(
       'icecandidate',
       this.handleIceCandidate,
     );
 
-    this.peerConnection.removeEventListener(
+    this.peerConnection?.removeEventListener(
       'icecandidateerror',
       this.handleIceCandidateError,
     );
 
-    this.peerConnection.removeEventListener(
+    this.peerConnection?.removeEventListener(
       'iceconnectionstatechange',
       this.handleIceConnectionStateChange,
     );
 
-    this.peerConnection.removeEventListener(
+    this.peerConnection?.removeEventListener(
       'negotiationneeded',
       this.handleNegotiationNeeded,
     );
 
-    this.peerConnection.removeEventListener(
+    this.peerConnection?.removeEventListener(
       'signalingstatechange',
       this.handleSignalingStateChange,
     );
 
-    this.peerConnection.removeEventListener('track', this.handleNewRemoteTrack);
+    this.peerConnection?.removeEventListener(
+      'track',
+      this.handleNewRemoteTrack,
+    );
+  };
+
+  private handleCallRejected = () => {
+    console.log('WebRTCCall: handle rejected call');
+    this.reset();
   };
 
   private addSignalingEventListeners = () => {
@@ -344,6 +341,10 @@ export class WebRTCCall {
     this.signalingConnection?.on(
       EventTypes.newIceCandidate,
       this.handleRemoteICECandidate,
+    );
+    this.signalingConnection?.on(
+      EventTypes.callRejected,
+      this.handleCallRejected,
     );
   };
 
@@ -358,9 +359,21 @@ export class WebRTCCall {
       EventTypes.newIceCandidate,
       this.handleRemoteICECandidate,
     );
+    this.signalingConnection?.off(
+      EventTypes.callRejected,
+      this.handleCallRejected,
+    );
   };
 
   private reset = () => {
+    this.peerConnection?.close();
+    this.removeWebRTCEventListeners();
+    this.removeSignalingEventListeners();
+
+    this.peerConnection = null;
+    this.signalingConnection = null;
+    this.remoteMediaStream = null;
+    this.remoteCandidates = [];
     this.offer = null;
   };
 
@@ -375,13 +388,55 @@ export class WebRTCCall {
     // Add our media stream tracks to the peer connection.
     localMediaStream
       .getTracks()
-      .forEach(track => this.peerConnection.addTrack(track, localMediaStream));
+      .forEach(track => this.peerConnection?.addTrack(track, localMediaStream));
   };
 
   endCall = () => {
-    this.peerConnection.close();
-    this.removeWebRTCEventListeners();
-    this.removeSignalingEventListeners();
     this.reset();
   };
+
+  acceptCall = async () => {
+    /**
+     * TODO:
+     * 1. Get streams
+     * 2. Create peer connection
+     * 3. Add streams to peer connection
+     * 4. Create answer
+     * 5. Set local description
+     * 6. Send answer to signaling server
+     */
+  };
+
+  rejectCall = async ({from, target}: {target: string; from: string}) => {
+    console.log('WebRTCCall: rejecting call from:', from);
+    this.signalingConnection = await getSignalingConnection({authToken: from});
+    const rejectCallData: RejectCallData = {
+      from,
+      target,
+      type: 'reject-call',
+    };
+    console.log('WebRTCCall: sending reject call data:', rejectCallData);
+    this.signalingConnection?.emit(EventTypes.rejectCall, rejectCallData);
+  };
 }
+
+/*
+  TODO:
+  4. Listen to "video-offer" and do:
+    4.1. Create an RTCPeerConnection
+    4.2. Create an RTCSessionDescription using the received SDP offer
+    4.3. Call RTCPeerConnection.setRemoteDescription() to tell WebRTC about Naomi's configuration
+    4.4. Call getUserMedia() to access the webcam and microphone
+    4.5. Promise fulfilled: add the local stream's tracks by calling RTCPeerConnection.addTrack()
+    4.6. Promise fulfilled: call RTCPeerConnection.createAnswer() to create an SDP answer to send to Naomi
+    4.7. Promise fulfilled: configure Priya's end of the connection by match the generated answer by calling RTCPeerConnection.setLocalDescription()
+    4.8. Promise fulfilled: send the SDP answer through the signaling server to Naomi in a message of type “video-answer”
+*/
+
+/**
+ * TODO:
+ * 5. Listen to "video-answer" and do:
+ * 5.1. Create an RTCSessionDescriptio n using the received SDP answer
+ * 5.2. Pass the session description to RTCPeerConnection.setRemoteDescription()
+ *    to configure Naomi's WebRTC layer to know how Priya's end of the connection is configured
+ */
