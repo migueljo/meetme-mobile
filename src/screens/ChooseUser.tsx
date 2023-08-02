@@ -6,7 +6,7 @@ import {useNavigation} from '@react-navigation/native';
 
 import {useUserStore, User} from '../store';
 import {SCREENS} from '../utils/constants';
-import useSignalingConnection from '../hooks/useSignalingServer';
+import useSignalingConnection from '../hooks/useSignalingConnection';
 
 export function ChooseUser() {
   const userStore = useUserStore();
@@ -14,7 +14,7 @@ export function ChooseUser() {
   const signalingConnection = useSignalingConnection();
 
   const handleNext = () => {
-    signalingConnection.start();
+    signalingConnection.start({authToken: userStore.user});
     navigation.navigate(SCREENS.CALL);
   };
 
