@@ -3,8 +3,8 @@ import {
   RTCPeerConnection,
   MediaStream,
   RTCIceCandidate,
-  RTCSessionDescription,
 } from 'react-native-webrtc';
+import _ from 'lodash';
 
 import {
   EventTypes,
@@ -13,36 +13,7 @@ import {
   getSignalingConnection,
 } from './SignalingConnection';
 import {useUserStore} from '../store';
-
-export type OfferMessageData = {
-  type: 'offer';
-  name: string; // Sender's name
-  target: string; // // Person receiving the description
-  sdp: string; // Description to send
-};
-
-export type AnswerMessageData = {
-  type: 'answer';
-  name: string; // Sender's name
-  target: string; // // Person receiving the description
-  sdp: string; // Description to send
-};
-
-export type IceCandidateMessageData = {
-  type: 'new-ice-candidate';
-  target: string; // Person receiving the description
-  candidate: string; // The SDP candidate string
-};
-
-export type RejectCallData = {
-  type: 'reject-call';
-  target: string;
-  from: string;
-};
-
-export type CallRejectedData = {
-  type: 'call-rejected';
-};
+import {Platform} from 'react-native';
 
 const PEER_CONSTRAINTS = {
   iceServers: [{urls: 'stun:stun.l.google.com:19302'}],
@@ -51,9 +22,11 @@ const PEER_CONSTRAINTS = {
 export class WebRTCCall {
   private remoteMediaStream: any;
   private peerConnection: RTCPeerConnection | null = null;
-  private remoteCandidates = [];
+  private remoteCandidates: RTCIceCandidate[] = [];
   private offer = null;
   private signalingConnection: SignalingConnectionType | null = null;
+  private role: 'caller' | 'callee' | null = null;
+  private target: string | null = null;
 
   private createOffer = async () => {
     const sessionConstraints = {
@@ -77,9 +50,13 @@ export class WebRTCCall {
         sdp: offerDescription.sdp,
       };
 
+      console.log(
+        `WebRTCCall: createOffer() Setting local description on ${Platform.OS}`,
+        _.omit(offerData, 'sdp'),
+      );
       await this.peerConnection?.setLocalDescription(offerDescription);
 
-      console.log('WebRTCCall: Emitting offer', offerData);
+      console.log('WebRTCCall: Emitting offer', _.omit(offerData, 'sdp'));
       this.signalingConnection?.emit(EventTypes.offer, offerData);
     } catch (err) {
       // TODO: Think about how to handle this error.
@@ -88,13 +65,12 @@ export class WebRTCCall {
   };
 
   private handleRemoteOffer = async (offerData: OfferMessageData) => {
-    console.log('WebRTCCall: Received offer', offerData);
+    console.log('WebRTCCall: Handle remote offer', _.omit(offerData, 'sdp'));
     try {
-      const offerDescription = new RTCSessionDescription({
-        sdp: offerData.sdp,
+      await this.peerConnection?.setRemoteDescription({
         type: offerData.type,
+        sdp: offerData.sdp,
       });
-      await this.peerConnection?.setRemoteDescription(offerDescription);
 
       const answerDescription = await this.peerConnection?.createAnswer();
       const answerData: AnswerMessageData = {
@@ -104,12 +80,17 @@ export class WebRTCCall {
         sdp: answerDescription.sdp,
       };
 
+      console.log(
+        'WebRTCCall: Setting local description on',
+        Platform.OS,
+        _.omit(answerData, 'sdp'),
+      );
       await this.peerConnection?.setLocalDescription(answerDescription);
 
       // Here is a good place to process candidates.
       this.processCandidates();
       // Send the answerDescription back as a response to the offerDescription.
-      console.log('WebRTCCall: Emitting answer', answerData);
+      console.log('WebRTCCall: Emitting answer', _.omit(answerData, 'sdp'));
       this.signalingConnection?.emit(EventTypes.answer, answerData);
     } catch (err) {
       throw err;
@@ -118,13 +99,17 @@ export class WebRTCCall {
   };
 
   private handleRemoteAnswer = async (answerData: AnswerMessageData) => {
-    console.log('WebRTCCall: Received answer', answerData);
+    console.log('WebRTCCall: Received answer', _.omit(answerData, 'sdp'));
     try {
-      const answerDescription = new RTCSessionDescription({
+      console.log(
+        'WebRTCCall: handleRemoteAnswer() Setting remote description',
+        Platform.OS,
+        _.omit(answerData, 'sdp'),
+      );
+      await this.peerConnection?.setRemoteDescription({
         sdp: answerData.sdp,
         type: answerData.type,
       });
-      await this.peerConnection?.setRemoteDescription(answerDescription);
     } catch (err) {
       // TODO: Think about how to handle this error.
       throw err;
@@ -138,14 +123,19 @@ export class WebRTCCall {
       'WebRTCCall: Received remote ICE candidate',
       iceCandidateMessage,
     );
-
-    // TODO: Implement this.
-    // const iceCandidate = new RTCIceCandidate(iceCandidate);
-    // // TODO: what does remoteDescription mean/do?
-    // if (this.peerConnection?.remoteDescription == null) {
-    //   return this.remoteCandidates.push(iceCandidate);
-    // }
-    // return this.peerConnection?.addIceCandidate(iceCandidate);
+    const iceCandidate = new RTCIceCandidate({
+      candidate: iceCandidateMessage.candidate.candidate,
+      // @ts-ignore
+      sdpMid: iceCandidateMessage.candidate.sdpMid,
+      // @ts-ignore
+      sdpMLineIndex: iceCandidateMessage.candidate.sdpMLineIndex,
+    });
+    // TODO: what does remoteDescription mean/do?
+    if (this.peerConnection?.remoteDescription === null) {
+      this.remoteCandidates = this.remoteCandidates || [];
+      return this.remoteCandidates.push(iceCandidate);
+    }
+    return this.peerConnection?.addIceCandidate(iceCandidate);
   }
 
   private processCandidates() {
@@ -186,10 +176,15 @@ export class WebRTCCall {
 
   // TODO: Add type for event.
   private handleConnectionStateChange = event => {
+    console.log(
+      `WebRTCCall: handleConnectionStateChange() event on ${Platform.OS}`,
+      {connectionState: this.peerConnection?.connectionState},
+    );
+
     switch (this.peerConnection?.connectionState) {
       case 'closed':
         // You can handle the call being disconnected here.
-
+        console.log('WebRTCCall: handleConnectionStateChange() closed');
         break;
     }
   };
@@ -198,39 +193,59 @@ export class WebRTCCall {
   private handleIceCandidate = event => {
     // When you find a null candidate then there are no more candidates.
     // Gathering of candidates has finished.
+    console.log(
+      `WebRTCCall: handleIceCandidate() event on ${Platform.OS}`,
+      event.candidate,
+    );
     if (!event.candidate) {
       return;
     }
 
-    // TODO: 3. Send candidates to the remote peer by the signaling server. Use "new-ice-candidate" through the signaling server
-    // Send the event.candidate onto the person you're calling.
+    const iceCandidateData: IceCandidateMessageData = {
+      candidate: event.candidate,
+      target: this.target as string,
+      type: EventTypes.newIceCandidate,
+    };
+
     // Keeping to Trickle ICE Standards, you should send the candidates immediately.
+    // Send the event.candidate to the remote peer through the signaling server.
+    this.signalingConnection?.emit(
+      EventTypes.newIceCandidate,
+      iceCandidateData,
+    );
   };
 
   // TODO: Add type for event.
   private handleIceCandidateError = event => {
+    console.log('WebRTCCall: handleIceCandidateError()');
     // You can ignore some candidate errors.
     // Connections can still be made even when errors occur.
   };
 
   // TODO: Add type for event.
   private handleIceConnectionStateChange = event => {
+    console.log(
+      'WebRTCCall: handleIceConnectionStateChange()',
+      this.peerConnection?.iceConnectionState,
+    );
+
     switch (this.peerConnection?.iceConnectionState) {
       case 'connected':
       case 'completed':
         // You can handle the call being connected here.
         // Like setting the video streams to visible.
         // TODO: Dispatch event to the component to handle the call being connected.
+        console.log(`WebRTCCall: Call is connected now on ${Platform.OS}`);
         break;
     }
   };
 
   // TODO: Add type for event.
   private handleNegotiationNeeded = event => {
-    // You can start the offer stages here.
-    // TODO: 1. create the off ONCE, call #createOffer.
+    console.log('WebRTCCall: handleNegotiationNeeded()');
+    // Start the offer stage here.
     // This event can be called multiple times. so make sure to only create an offer once. to avoid weird states
-    if (this.offer) {
+    if (this.offer || this.role === 'callee') {
       return;
     }
 
@@ -239,16 +254,22 @@ export class WebRTCCall {
 
   // TODO: Add type for event.
   private handleSignalingStateChange = event => {
+    console.log('WebRTCCall: handleSignalingStateChange()');
     switch (this.peerConnection?.signalingState) {
       case 'closed':
         // You can handle the call being disconnected here.
         // TODO: Dispatch event to the component to handle the call being disconnected.
+        console.log('WebRTCCall: handleSignalingStateChange() closed');
         break;
     }
   };
 
   // TODO: Add type for event.
   private handleNewRemoteTrack = event => {
+    console.log(
+      `WebRTCCall: handleNewRemoteTrack() on ${Platform.OS}`,
+      event.track,
+    );
     // Grab the remote track from the connected participant.
     this.remoteMediaStream =
       this.remoteMediaStream || new MediaStream(undefined);
@@ -336,7 +357,8 @@ export class WebRTCCall {
       'WebRTCCall: adding signaling event listeners?',
       !!this.signalingConnection,
     );
-    this.signalingConnection?.on(EventTypes.offer, this.handleRemoteOffer);
+    // Remote offer messages are handled by the signaling connecting which is setup in the Call component.
+    // this.signalingConnection?.on(EventTypes.offer, this.handleRemoteOffer);
     this.signalingConnection?.on(EventTypes.answer, this.handleRemoteAnswer);
     this.signalingConnection?.on(
       EventTypes.newIceCandidate,
@@ -353,7 +375,7 @@ export class WebRTCCall {
       'WebRTCCall: removing signaling event listeners?',
       !!this.signalingConnection,
     );
-    this.signalingConnection?.off(EventTypes.offer, this.handleRemoteOffer);
+    // this.signalingConnection?.off(EventTypes.offer, this.handleRemoteOffer);
     this.signalingConnection?.off(EventTypes.answer, this.handleRemoteAnswer);
     this.signalingConnection?.off(
       EventTypes.newIceCandidate,
@@ -375,9 +397,18 @@ export class WebRTCCall {
     this.remoteMediaStream = null;
     this.remoteCandidates = [];
     this.offer = null;
+    this.role = null;
+    this.target = null;
   };
 
-  startCall = async ({authToken}: GetSignalingConnectionArgs) => {
+  startCall = async ({
+    authToken,
+    target,
+  }: GetSignalingConnectionArgs & {target: string}) => {
+    this.role = 'caller';
+    this.target = target;
+
+    console.log('WebRTCCall: start call');
     this.signalingConnection = await getSignalingConnection({authToken});
     this.peerConnection = new RTCPeerConnection(PEER_CONSTRAINTS);
     const localMediaStream = await this.getUserMedia();
@@ -392,19 +423,30 @@ export class WebRTCCall {
   };
 
   endCall = () => {
+    console.log('WebRTCCall: ending call');
     this.reset();
   };
 
-  acceptCall = async () => {
-    /**
-     * TODO:
-     * 1. Get streams
-     * 2. Create peer connection
-     * 3. Add streams to peer connection
-     * 4. Create answer
-     * 5. Set local description
-     * 6. Send answer to signaling server
-     */
+  acceptCall = async ({remoteOffer}: AcceptCallFnArgs) => {
+    console.log('WebRTCCall: accept call', {remoteOffer});
+    this.role = 'callee';
+    this.target = remoteOffer.name;
+    console.log('WebRTCCall: accepting call from:', remoteOffer.target);
+    this.signalingConnection = await getSignalingConnection({
+      authToken: remoteOffer.target,
+    });
+    this.peerConnection = new RTCPeerConnection(PEER_CONSTRAINTS);
+    const localMediaStream = await this.getUserMedia();
+
+    this.addWebRTCEventListeners();
+    this.addSignalingEventListeners();
+
+    // Add our media stream tracks to the peer connection.
+    localMediaStream
+      .getTracks()
+      .forEach(track => this.peerConnection?.addTrack(track, localMediaStream));
+
+    await this.handleRemoteOffer(remoteOffer);
   };
 
   rejectCall = async ({from, target}: {target: string; from: string}) => {
@@ -420,23 +462,40 @@ export class WebRTCCall {
   };
 }
 
-/*
-  TODO:
-  4. Listen to "video-offer" and do:
-    4.1. Create an RTCPeerConnection
-    4.2. Create an RTCSessionDescription using the received SDP offer
-    4.3. Call RTCPeerConnection.setRemoteDescription() to tell WebRTC about Naomi's configuration
-    4.4. Call getUserMedia() to access the webcam and microphone
-    4.5. Promise fulfilled: add the local stream's tracks by calling RTCPeerConnection.addTrack()
-    4.6. Promise fulfilled: call RTCPeerConnection.createAnswer() to create an SDP answer to send to Naomi
-    4.7. Promise fulfilled: configure Priya's end of the connection by match the generated answer by calling RTCPeerConnection.setLocalDescription()
-    4.8. Promise fulfilled: send the SDP answer through the signaling server to Naomi in a message of type “video-answer”
-*/
+export type OfferMessageData = {
+  type: 'offer';
+  name: string; // Sender's name
+  target: string; // // Person receiving the description
+  sdp: string; // Description to send
+};
 
-/**
- * TODO:
- * 5. Listen to "video-answer" and do:
- * 5.1. Create an RTCSessionDescriptio n using the received SDP answer
- * 5.2. Pass the session description to RTCPeerConnection.setRemoteDescription()
- *    to configure Naomi's WebRTC layer to know how Priya's end of the connection is configured
- */
+export type AnswerMessageData = {
+  type: 'answer';
+  name: string; // Sender's name
+  target: string; // // Person receiving the description
+  sdp: string; // Description to send
+};
+
+export type IceCandidateMessageData = {
+  type: 'new-ice-candidate';
+  target: string; // Person receiving the description
+  candidate: {
+    candidate: string; // The SDP candidate string
+    sdpMLineIndex: number; // The index (starting at zero) of the m-line in the SDP this candidate is associated with.
+    sdpMid: string; // The media stream identification, "audio" or "video", for the m-line this candidate is associated with.
+  };
+};
+
+export type RejectCallData = {
+  type: 'reject-call';
+  target: string;
+  from: string;
+};
+
+export type CallRejectedData = {
+  type: 'call-rejected';
+};
+
+export type AcceptCallFnArgs = {
+  remoteOffer: OfferMessageData;
+};

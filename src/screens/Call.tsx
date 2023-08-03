@@ -14,6 +14,7 @@ import {
   SignalingConnectionType,
 } from '../libs/SignalingConnection';
 import {OfferMessageData} from '../libs/WebRTCCall';
+import _ from 'lodash';
 
 export function Call() {
   const userStore = useUserStore();
@@ -21,12 +22,14 @@ export function Call() {
   const navigation = useNavigation();
   const webrtcCall = useWebRTCCall();
   const [callPopUpVisible, setCallPopUpVisible] = React.useState(false);
-  const [offer, setOffer] = React.useState<OfferMessageData | null>(null);
+  const [remoteOffer, setRemoteOffer] = React.useState<OfferMessageData | null>(
+    null,
+  );
 
   const handleCall = async () => {
     console.log('Call screen: handle call to:', callee);
     userStore.setCallee(callee);
-    webrtcCall.startCall({authToken: userStore.user});
+    webrtcCall.startCall({authToken: userStore.user, target: callee});
     navigation.navigate(SCREENS.CALL_ROOM);
   };
 
@@ -36,7 +39,7 @@ export function Call() {
 
   const handleAcceptCall = async () => {
     console.log('Call screen: handle accept call');
-    await webrtcCall.acceptCall();
+    await webrtcCall.acceptCall({remoteOffer: remoteOffer as OfferMessageData});
     setCallPopUpVisible(false);
     // TODO: navigate to call room
   };
@@ -45,7 +48,7 @@ export function Call() {
     console.log('Call screen: handle reject call');
     await webrtcCall.rejectCall({
       from: userStore.user,
-      target: offer?.name as string,
+      target: remoteOffer?.name as string,
     });
     setCallPopUpVisible(false);
   };
@@ -59,8 +62,8 @@ export function Call() {
         });
         console.log('Call screen: adding offer listener');
         signalingConnection.on(EventTypes.offer, (data: OfferMessageData) => {
-          console.log('Call screen: received offer from:', data);
-          setOffer(data);
+          console.log('Call screen: received offer from:', _.omit(data, 'sdp'));
+          setRemoteOffer(data);
           setCallPopUpVisible(true);
         });
       } catch (error) {
