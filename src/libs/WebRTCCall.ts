@@ -28,6 +28,18 @@ export class WebRTCCall {
   private role: 'caller' | 'callee' | null = null;
   private target: string | null = null;
 
+  constructor() {
+    this.remoteCandidates = [];
+    (async () => {
+      const authToken = await useUserStore.getState().user;
+      this.signalingConnection = await getSignalingConnection({authToken});
+      this.signalingConnection?.on(
+        EventTypes.newIceCandidate,
+        this.handleRemoteICECandidate,
+      );
+    })();
+  }
+
   private createOffer = async () => {
     const sessionConstraints = {
       mandatory: {
@@ -116,9 +128,9 @@ export class WebRTCCall {
     }
   };
 
-  private handleRemoteICECandidate(
+  private handleRemoteICECandidate = (
     iceCandidateMessage: IceCandidateMessageData,
-  ) {
+  ) => {
     console.log(
       'WebRTCCall: Received remote ICE candidate',
       iceCandidateMessage,
@@ -130,24 +142,32 @@ export class WebRTCCall {
       // @ts-ignore
       sdpMLineIndex: iceCandidateMessage.candidate.sdpMLineIndex,
     });
-    // TODO: what does remoteDescription mean/do?
-    if (this.peerConnection?.remoteDescription === null) {
-      this.remoteCandidates = this.remoteCandidates || [];
-      return this.remoteCandidates.push(iceCandidate);
-    }
-    return this.peerConnection?.addIceCandidate(iceCandidate);
-  }
 
-  private processCandidates() {
+    // If remote peer connection is not set yet, store the candidate for processing later.
+    if (!this.peerConnection?.remoteDescription) {
+      this.remoteCandidates.push(iceCandidate);
+      return;
+    }
+    console.log(
+      `WebRTCCall: Adding remote ICE candidate on ${Platform.OS}`,
+      iceCandidate,
+    );
+    return this.peerConnection?.addIceCandidate(iceCandidate);
+  };
+
+  private processCandidates = () => {
+    console.log(`WebRTCCall: Processing candidates on ${Platform.OS}`, {
+      remoteCandidates: this.remoteCandidates.length,
+    });
     if (this.remoteCandidates.length === 0) {
       return;
     }
 
-    this.remoteCandidates.map(candidate =>
+    this.remoteCandidates.forEach(candidate =>
       this.peerConnection?.addIceCandidate(candidate),
     );
     this.remoteCandidates = [];
-  }
+  };
 
   getUserMedia = async () => {
     const mediaConstraints = {
@@ -361,10 +381,6 @@ export class WebRTCCall {
     // this.signalingConnection?.on(EventTypes.offer, this.handleRemoteOffer);
     this.signalingConnection?.on(EventTypes.answer, this.handleRemoteAnswer);
     this.signalingConnection?.on(
-      EventTypes.newIceCandidate,
-      this.handleRemoteICECandidate,
-    );
-    this.signalingConnection?.on(
       EventTypes.callRejected,
       this.handleCallRejected,
     );
@@ -377,10 +393,6 @@ export class WebRTCCall {
     );
     // this.signalingConnection?.off(EventTypes.offer, this.handleRemoteOffer);
     this.signalingConnection?.off(EventTypes.answer, this.handleRemoteAnswer);
-    this.signalingConnection?.off(
-      EventTypes.newIceCandidate,
-      this.handleRemoteICECandidate,
-    );
     this.signalingConnection?.off(
       EventTypes.callRejected,
       this.handleCallRejected,
