@@ -29,10 +29,26 @@ export class WebRTCCall extends EventEmitter {
   private role: 'caller' | 'callee' | null = null;
   private target: string | null = null;
 
+  private reset = () => {
+    this.peerConnection?.close();
+    this.removeWebRTCEventListeners();
+    this.removeSignalingEventListeners();
+
+    this.peerConnection = null;
+    this.signalingConnection = null;
+    this.remoteMediaStream = null;
+    this.remoteCandidates = [];
+    this.offer = null;
+    this.role = null;
+    this.target = null;
+  };
+
   constructor() {
     super();
     this.remoteCandidates = [];
     (async () => {
+      // Listen for new ICE candidates as soon as the class is instantiated
+      // so we don't miss them when when the peer is getting ready for the call.
       const authToken = await useUserStore.getState().user;
       this.signalingConnection = await getSignalingConnection({authToken});
       this.signalingConnection?.on(
@@ -42,6 +58,12 @@ export class WebRTCCall extends EventEmitter {
     })();
   }
 
+  /**
+   * Offer and answer are objects containing the description of the webRTC session, for example:
+   * 1. (Media formats) Media tracks attached to the WebRTC session.
+   * 2. Codec and options provided by the browser.
+   * 3. ICE candidates already attached to the WebRTC session.
+   */
   private createOffer = async () => {
     const sessionConstraints = {
       mandatory: {
@@ -55,6 +77,7 @@ export class WebRTCCall extends EventEmitter {
       const offerDescription = await this.peerConnection?.createOffer(
         sessionConstraints,
       );
+      // Use to make sure the offer is created once
       this.offer = offerDescription;
       const userStore = useUserStore.getState();
       const offerData: OfferMessageData = {
@@ -68,9 +91,14 @@ export class WebRTCCall extends EventEmitter {
         `WebRTCCall: createOffer() Setting local description on ${Platform.OS}`,
         _.omit(offerData, 'sdp'),
       );
+      /**
+       * setLocalDescription() sets the session description for the local end of the connection,
+       * which starts the gathering of ICE candidates.
+       */
       await this.peerConnection?.setLocalDescription(offerDescription);
 
       console.log('WebRTCCall: Emitting offer', _.omit(offerData, 'sdp'));
+      // Sending offer to the other peer
       this.signalingConnection?.emit(EventTypes.offer, offerData);
     } catch (err) {
       // TODO: Think about how to handle this error.
@@ -78,14 +106,20 @@ export class WebRTCCall extends EventEmitter {
     }
   };
 
+  /**
+   * This method is called on the recipient side of the call.
+   * When the recipient receives an offer from the caller through the signaling server.
+   */
   private handleRemoteOffer = async (offerData: OfferMessageData) => {
     console.log('WebRTCCall: Handle remote offer', _.omit(offerData, 'sdp'));
     try {
+      // Set the remote description of the recipient as the offer from the other peer.
       await this.peerConnection?.setRemoteDescription({
         type: offerData.type,
         sdp: offerData.sdp,
       });
 
+      // Create an answer to an offer received from a remote peer.
       const answerDescription = await this.peerConnection?.createAnswer();
       const answerData: AnswerMessageData = {
         type: answerDescription.type,
@@ -99,12 +133,19 @@ export class WebRTCCall extends EventEmitter {
         Platform.OS,
         _.omit(answerData, 'sdp'),
       );
+      // Set the answer as the local description of the recipient.
+      // This will start the gathering of ICE candidates.
       await this.peerConnection?.setLocalDescription(answerDescription);
 
-      // Here is a good place to process candidates.
+      /**
+       * We use the trickle ICE technique to allow the other peer to start sending ICE candidates
+       * as soon as they are available, instead of waiting for the whole ICE gathering process to finish.
+       * this might cause missing candidates on recipient side because the connection has not really started,
+       * and we cannot process them, so to avoid this we save the candidates in a "cache" an then process them here.
+       */
       this.processCandidates();
-      // Send the answerDescription back as a response to the offerDescription.
       console.log('WebRTCCall: Emitting answer', _.omit(answerData, 'sdp'));
+      // Send the answer back to the caller as a response to the offer.
       this.signalingConnection?.emit(EventTypes.answer, answerData);
     } catch (err) {
       throw err;
@@ -399,20 +440,6 @@ export class WebRTCCall extends EventEmitter {
       EventTypes.callRejected,
       this.handleCallRejected,
     );
-  };
-
-  private reset = () => {
-    this.peerConnection?.close();
-    this.removeWebRTCEventListeners();
-    this.removeSignalingEventListeners();
-
-    this.peerConnection = null;
-    this.signalingConnection = null;
-    this.remoteMediaStream = null;
-    this.remoteCandidates = [];
-    this.offer = null;
-    this.role = null;
-    this.target = null;
   };
 
   startCall = async ({
