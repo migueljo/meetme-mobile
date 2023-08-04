@@ -153,6 +153,10 @@ export class WebRTCCall extends EventEmitter {
     }
   };
 
+  /**
+   * This method is called on the caller side of the call.
+   * When the caller receives an answer from the recipient through the signaling server.
+   */
   private handleRemoteAnswer = async (answerData: AnswerMessageData) => {
     console.log('WebRTCCall: Received answer', _.omit(answerData, 'sdp'));
     try {
@@ -161,6 +165,7 @@ export class WebRTCCall extends EventEmitter {
         Platform.OS,
         _.omit(answerData, 'sdp'),
       );
+      // Set the remote description of the caller as the answer from the other peer.
       await this.peerConnection?.setRemoteDescription({
         sdp: answerData.sdp,
         type: answerData.type,
@@ -171,6 +176,10 @@ export class WebRTCCall extends EventEmitter {
     }
   };
 
+  /**
+   * This is called on both sides of the call recipient and caller,
+   * after they get an ICE candidate from the other peer through the signaling server.
+   */
   private handleRemoteICECandidate = (
     iceCandidateMessage: IceCandidateMessageData,
   ) => {
@@ -178,6 +187,7 @@ export class WebRTCCall extends EventEmitter {
       'WebRTCCall: Received remote ICE candidate',
       iceCandidateMessage,
     );
+    // Create the ICE candidate object from the date received.
     const iceCandidate = new RTCIceCandidate({
       candidate: iceCandidateMessage.candidate.candidate,
       // @ts-ignore
@@ -186,6 +196,11 @@ export class WebRTCCall extends EventEmitter {
       sdpMLineIndex: iceCandidateMessage.candidate.sdpMLineIndex,
     });
 
+    /**
+     * remoteDescription is present only when the peer has called setRemoteDescription()
+     * which means that the peer connection has started and we can add the candidate to the peer connection.
+     * If the remote description is not set yet, we store the candidate in a "cache" and process it later.
+     */
     // If remote peer connection is not set yet, store the candidate for processing later.
     if (!this.peerConnection?.remoteDescription) {
       this.remoteCandidates.push(iceCandidate);
@@ -198,6 +213,11 @@ export class WebRTCCall extends EventEmitter {
     return this.peerConnection?.addIceCandidate(iceCandidate);
   };
 
+  /**
+   * This functions runs when the peer connection is ready to start adding ICE candidates.
+   * Normally the connection is ready to add candidates after setting the local and remote description.
+   * This function add the candidates to the peer connection that were stored in the "cache" while the connection was not ready.
+   */
   private processCandidates = () => {
     console.log(`WebRTCCall: Processing candidates on ${Platform.OS}`, {
       remoteCandidates: this.remoteCandidates.length,
@@ -212,6 +232,8 @@ export class WebRTCCall extends EventEmitter {
     this.remoteCandidates = [];
   };
 
+  // Get video and audio stream from the device.
+  // TODO: Extract this function out of this class
   getUserMedia = async () => {
     const mediaConstraints = {
       audio: true,
@@ -237,6 +259,7 @@ export class WebRTCCall extends EventEmitter {
     }
   };
 
+  // TODO: Continue documentation here...
   // TODO: Add type for event.
   private handleConnectionStateChange = event => {
     console.log(
