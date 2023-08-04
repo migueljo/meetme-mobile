@@ -5,6 +5,7 @@ import {
   RTCIceCandidate,
 } from 'react-native-webrtc';
 import _ from 'lodash';
+import EventEmitter from 'events';
 
 import {
   EventTypes,
@@ -19,7 +20,7 @@ const PEER_CONSTRAINTS = {
   iceServers: [{urls: 'stun:stun.l.google.com:19302'}],
 };
 
-export class WebRTCCall {
+export class WebRTCCall extends EventEmitter {
   private remoteMediaStream: any;
   private peerConnection: RTCPeerConnection | null = null;
   private remoteCandidates: RTCIceCandidate[] = [];
@@ -29,6 +30,7 @@ export class WebRTCCall {
   private target: string | null = null;
 
   constructor() {
+    super();
     this.remoteCandidates = [];
     (async () => {
       const authToken = await useUserStore.getState().user;
